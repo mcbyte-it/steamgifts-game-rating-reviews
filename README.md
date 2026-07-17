@@ -2,6 +2,8 @@
 
 A userscript for [SteamGifts](https://www.steamgifts.com/) that replaces the small Steam store icon next to each game listing with a clickable rating badge, showing the game's review score, release date, and genres — without leaving the page.
 
+![SteamGifts – Steam Game Info (Ratings)](screenshot.png)
+
 ## Features
 
 - **Review score badge** — color-coded percentage + review count (e.g. `92% (14,302)`), pulled from Steam's review summary.
