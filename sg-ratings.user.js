@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         SteamGifts – Steam Game Info (rating, release date, genres)
 // @namespace    mcbyte
-// @version      1.4.2
-// @description  Replaces the Steam store icon with a clickable rating badge + tooltip (all-review label, release date, genres) on SteamGifts listings
+// @version      1.5.0
+// @description  Replaces the Steam store icon with a clickable rating badge + tooltip (all-review label, release date, genres, per-game refresh) on SteamGifts listings
 // @author       mcbyte
 // @match        https://www.steamgifts.com/*
 // @grant        GM_xmlhttpRequest
@@ -22,9 +22,11 @@
     'use strict';
 
     /* ================= config ================= */
-    const CACHE_PREFIX  = 'sgr3_';
-    const CACHE_TTL     = 30 * 24 * 60 * 60 * 1000; // 30 days
-    const CACHE_TTL_FAIL = 2  * 60 * 60 * 1000;     // 2 hours (avoid hammering permanently-failing apps)
+    const CACHE_PREFIX   = 'sgr3_';
+    const CACHE_TTL      = 30 * 24 * 60 * 60 * 1000; // 30 days
+    const CACHE_TTL_FAIL = 2  * 60 * 60 * 1000;      // 2 hours (avoid hammering permanently-failing apps)
+    const CACHE_TTL_FRESH = 24 * 60 * 60 * 1000;     // 1 day (games with few reviews, volatile scores)
+    const FRESH_THRESHOLD = 50;                      // < this many reviews => volatile, short TTL
     const CONCURRENCY  = 4;
     const REQ_DELAY    = 200;
     const CC           = 'us';
@@ -52,15 +54,20 @@
         .sgr-vpos   {background:#2f7fa8}
         .sgr-ovpos  {background:#1f8a4c}
 
+        /* wrapper carries a transparent top bridge so the mouse can cross into the box */
         .sgr-tip{
-            display:none;position:absolute;z-index:10000;left:0;top:calc(100% + 6px);
+            display:none;position:absolute;z-index:10000;left:0;top:100%;
+            padding-top:6px;
+        }
+        a.sgr-badge:hover .sgr-tip,
+        .sgr-tip:hover{display:block}
+        .sgr-tip-inner{
             width:290px;padding:10px 12px;border-radius:5px;
             background:#1b2838;color:#c7d5e0;border:1px solid #000;
             box-shadow:0 4px 14px rgba(0,0,0,.45);
             font-size:12px;font-weight:400;line-height:1.5;text-align:left;
             white-space:normal;cursor:default;
         }
-        a.sgr-badge:hover .sgr-tip{display:block}
         .sgr-tip .sgr-t-title{font-weight:700;color:#fff;margin-bottom:6px;font-size:13px}
         .sgr-tip .sgr-t-row{margin:3px 0}
         .sgr-tip .sgr-t-lbl{color:#8f98a0;display:inline-block;min-width:82px}
@@ -69,6 +76,11 @@
             display:inline-block;margin:2px 3px 2px 0;padding:2px 6px;border-radius:2px;
             background:#2a475e;color:#c7d5e0;font-size:11px;
         }
+        .sgr-tip .sgr-t-refresh{margin-top:8px;padding-top:7px;border-top:1px solid #2a475e;
+            display:flex;justify-content:space-between;align-items:center;gap:8px}
+        .sgr-tip .sgr-t-stale{color:#66707a;font-size:10px;font-style:italic}
+        .sgr-tip .sgr-t-refresh a{color:#66c0f4;text-decoration:none;font-size:11px;cursor:pointer;white-space:nowrap}
+        .sgr-tip .sgr-t-refresh a:hover{text-decoration:underline}
     `);
 
     /* ================= cache ================= */
@@ -79,7 +91,14 @@
         if (!raw) return null;
         try {
             const o = JSON.parse(raw);
-            const ttl = o.f ? CACHE_TTL_FAIL : CACHE_TTL;
+            let ttl;
+            if (o.f) {
+                ttl = CACHE_TTL_FAIL;
+            } else {
+                // volatile TTL for low-review games so new releases self-correct
+                const total = o.d && o.d.reviews ? o.d.reviews.total : null;
+                ttl = (total !== null && total < FRESH_THRESHOLD) ? CACHE_TTL_FRESH : CACHE_TTL;
+            }
             if (Date.now() - o.t > ttl) return null;
             return o.f ? FAILED : o.d;
         } catch (e) { return null; }
@@ -113,6 +132,24 @@
                 ontimeout: () => resolve(null)
             });
         });
+    }
+
+    function getOrCreateIcon(badge) {
+        let icon = badge.querySelector(':scope > i.fa-steam');
+        if (!icon) {
+            icon = document.createElement('i');
+            icon.className = 'fa fa-fw fa-steam';
+        }
+        return icon;
+    }
+
+    function loadingBadge(badge) {
+        const icon = getOrCreateIcon(badge);
+        badge.className = 'sgr-badge sgr-loading';
+        badge.textContent = '';
+        badge.appendChild(icon);
+        badge.appendChild(document.createTextNode('…'));
+        badge.title = '';
     }
 
     /* ================= data sources ================= */
@@ -165,15 +202,6 @@
         return 'sgr-vneg';
     }
 
-    function getOrCreateIcon(badge) {
-        let icon = badge.querySelector(':scope > i.fa-steam');
-        if (!icon) {
-            icon = document.createElement('i');
-            icon.className = 'fa fa-fw fa-steam';
-        }
-        return icon;
-    }
-
     function render(badge, appid, d) {
         const r = d.reviews;
         const s = d.details || {};
@@ -182,6 +210,7 @@
         const icon = getOrCreateIcon(badge);
 
         badge.className = 'sgr-badge';
+        badge.title = '';
 
         let pct = null, label, totalFmt = null;
         if (r && r.total) {
@@ -211,17 +240,32 @@
             ? '<div class="sgr-t-tags">' + s.genres.map(g => `<span class="sgr-t-tag">${esc(g)}</span>`).join('') + '</div>'
             : '';
 
+        const volatile = r && r.total > 0 && r.total < FRESH_THRESHOLD;
+        const staleNote = volatile ? '<span class="sgr-t-stale">few reviews — may shift</span>' : '<span></span>';
+
+        // tooltip = wrapper (transparent bridge) > inner (visible box)
         const tip = document.createElement('div');
         tip.className = 'sgr-tip';
         tip.innerHTML =
-            `<div class="sgr-t-title">${esc(s.name || 'Steam App ' + appid)}</div>` +
-            rows.join('') + tagsHtml;
+            '<div class="sgr-tip-inner">' +
+                `<div class="sgr-t-title">${esc(s.name || 'Steam App ' + appid)}</div>` +
+                rows.join('') + tagsHtml +
+                `<div class="sgr-t-refresh">${staleNote}<a data-sgr-refresh href="#">↻ Refresh</a></div>` +
+            '</div>';
+
+        // clicks inside the tooltip must not navigate to the store
         tip.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); });
+        tip.querySelector('[data-sgr-refresh]').addEventListener('click', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            refreshGame(appid);
+        });
         badge.appendChild(tip);
 
         badge.addEventListener('mouseenter', () => {
             tip.style.left = '0px';
-            const overflow = tip.getBoundingClientRect().right - (window.innerWidth - 12);
+            const overflow = tip.querySelector('.sgr-tip-inner')
+                .getBoundingClientRect().right - (window.innerWidth - 12);
             if (overflow > 0) tip.style.left = (-overflow) + 'px';
         });
     }
@@ -233,6 +277,19 @@
         badge.appendChild(icon);
         badge.appendChild(document.createTextNode('?'));
         badge.title = 'Failed to load Steam info';
+    }
+
+    /* refresh a single game: drop its cache, re-fetch, update every badge for it */
+    function refreshGame(appid) {
+        GM_deleteValue(CACHE_PREFIX + appid);
+        const targets = [...document.querySelectorAll('a.sgr-badge')]
+            .filter(b => b.dataset.sgrAppid === appid);
+        if (!targets.length) return;
+        targets.forEach(loadingBadge);
+        fetchAll(appid).then(d => {
+            if (d) { cacheSet(appid, d); targets.forEach(b => render(b, appid, d)); }
+            else   { cacheSetFail(appid); targets.forEach(renderErr); }
+        });
     }
 
     /* ================= queue ================= */
@@ -281,6 +338,7 @@
             badge.href = storeUrl;
             badge.target = '_blank';
             badge.rel = 'nofollow noopener';
+            badge.dataset.sgrAppid = appid;
             const li = document.createElement('i');
             li.className = 'fa fa-fw fa-steam';
             badge.appendChild(li);
