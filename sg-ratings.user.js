@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         SteamGifts – Steam Game Info (rating, release date, genres)
 // @namespace    mcbyte
-// @version      1.5.1
+// @version      1.5.2
 // @description  Replaces the Steam store icon with a clickable rating badge + tooltip (all-review label, release date, genres, per-game refresh) on SteamGifts listings
 // @author       mcbyte
-// @match        https://www.steamgifts.com/giveaway/*
+// @include      https://www.steamgifts.com/*
+// @exclude      https://www.steamgifts.com/discussion/*
+// @exclude      https://www.steamgifts.com/discussions*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -326,6 +328,10 @@
     function scan(root) {
         const scope = root instanceof Element ? root : document;
         scope.querySelectorAll('a[href*="store.steampowered.com/app/"]:not([data-sgr])').forEach(link => {
+            // Only take over the small steam-icon link. Some pages (e.g. a single
+            // giveaway's featured header) also link the game's cover image to the
+            // same store URL — badging that one would hide the artwork.
+            if (!link.querySelector('i.fa-steam')) return;
             const m = link.href.match(APPID_RE);
             if (!m) return;
             link.setAttribute('data-sgr', '1');
