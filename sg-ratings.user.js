@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         SteamGifts – Steam Game Info (rating, release date, genres)
 // @namespace    mcbyte
-// @version      1.5.0
+// @version      1.5.1
 // @description  Replaces the Steam store icon with a clickable rating badge + tooltip (all-review label, release date, genres, per-game refresh) on SteamGifts listings
 // @author       mcbyte
-// @match        https://www.steamgifts.com/*
+// @match        https://www.steamgifts.com/giveaway/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
