@@ -16,9 +16,23 @@ A userscript for [SteamGifts](https://www.steamgifts.com/) that replaces the sma
 ## Installation
 
 1. Install a userscript manager: [Tampermonkey](https://www.tampermonkey.net/) (recommended), [Violentmonkey](https://violentmonkey.github.io/), or [Greasemonkey](https://www.greasespot.net/).
-2. [Click here to install](https://raw.githubusercontent.com/mcbyte-it/steamgifts-game-rating-reviews/main/sg-ratings.user.js) — your userscript manager will open an install prompt automatically.
+2. **Chrome/Edge users — enable user scripts first** (see below), otherwise nothing will run.
+3. [Click here to install](https://raw.githubusercontent.com/mcbyte-it/steamgifts-game-rating-reviews/main/sg-ratings.user.js) — your userscript manager will open an install prompt automatically.
    *(Or open [`sg-ratings.user.js`](sg-ratings.user.js) in this repo and copy/paste it into a new script.)*
-3. Visit [steamgifts.com](https://www.steamgifts.com/) — badges appear automatically next to game listings.
+4. Visit [steamgifts.com](https://www.steamgifts.com/) — badges appear automatically next to game listings.
+
+### ⚠️ Chrome / Edge: you must enable user scripts
+
+On Chromium-based browsers (Chrome, Edge, Brave, Opera), Manifest V3 blocks extensions from running unreviewed code by default. Until you flip this switch, your userscript manager will install scripts but **silently never execute them** — no badges, no errors.
+
+Go to `chrome://extensions` → **Tampermonkey** (or **Violentmonkey**) → **Details**, and turn on:
+
+> **Allow User Scripts** ☐
+> *The extension will be able to run code which has not been reviewed by Google. It may be unsafe and you should only enable this if you know what you are doing.*
+
+On older Chrome versions the equivalent is the **Developer mode** toggle in the top-right of `chrome://extensions`.
+
+Firefox users can skip this — it doesn't apply.
 
 ## Configuration
 
